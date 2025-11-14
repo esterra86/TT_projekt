@@ -47,7 +47,10 @@ def receive(frame):
     elif frame.eth_type == ETH_TYPE_IP:
         print("[Ethernet] Przekazano do warstwy IP")
         return frame.payload
-
+    elif frame.eth_type == ETH_TYPE_IP:
+        from layers.ip_layer import receive as ip_receive
+        print("[Ethernet] Przekazano do warstwy IP")
+        return ip_receive(frame.payload)
     else:
         print("[Ethernet] Nieznany typ ramki")
 
