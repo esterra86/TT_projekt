@@ -1,7 +1,3 @@
-# layers/ethernet_layer.py
-
-from protocols.arp import handle_arp_packet
-
 ETH_TYPE_IP = 0x0800
 ETH_TYPE_ARP = 0x0806
 
@@ -40,18 +36,18 @@ def send(payload, dst_mac, eth_type):
 
 
 def receive(frame):
-    """
-    Odbiór ramki – decyduje, co robić w zależności od eth_type.
-    """
     print(f"[Ethernet] ODEBRANO ramkę: {frame}")
+
+    # Lokalny import — eliminuje circular import
+    from protocols.arp import handle_arp_packet
 
     if frame.eth_type == ETH_TYPE_ARP:
         return handle_arp_packet(frame.payload)
 
     elif frame.eth_type == ETH_TYPE_IP:
-        # W kroku 3 podłączymy tu ip_layer.receive()
         print("[Ethernet] Przekazano do warstwy IP")
         return frame.payload
 
     else:
         print("[Ethernet] Nieznany typ ramki")
+
