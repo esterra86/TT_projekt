@@ -32,6 +32,7 @@
 #server.server_close()
 #print("server stopped")
 
+
 #in webbrowser paste 192.168.1.97:9999
 #or in cmd curl 192.168.1.97:9999 (this will show you code in html)
 
@@ -41,3 +42,10 @@ if __name__ == "__main__":
     print("Test ARP:")
     mac = resolve("192.168.0.20")
     print("Otrzymany MAC:", mac)
+
+from protocols.icmp import send_ping
+
+if __name__ == "__main__":
+    print("=== TEST ICMP PING ===")
+    send_ping("192.168.0.20")
+
