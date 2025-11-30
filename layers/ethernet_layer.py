@@ -37,20 +37,19 @@ def send(payload, dst_mac, eth_type):
 
 def receive(frame):
     print(f"[Ethernet] ODEBRANO ramkę: {frame}")
-
-    # Lokalny import — eliminuje circular import
     from protocols.arp import handle_arp_packet
+    from layers.ip_layer import receive as ip_receive
 
     if frame.eth_type == ETH_TYPE_ARP:
+        # Pakiet ARP przekazujemy do protokołu ARP
         return handle_arp_packet(frame.payload)
 
     elif frame.eth_type == ETH_TYPE_IP:
-        print("[Ethernet] Przekazano do warstwy IP")
-        return frame.payload
-    elif frame.eth_type == ETH_TYPE_IP:
-        from layers.ip_layer import receive as ip_receive
+        # Pakiet IP przekazujemy do warstwy IP
         print("[Ethernet] Przekazano do warstwy IP")
         return ip_receive(frame.payload)
+
     else:
         print("[Ethernet] Nieznany typ ramki")
+        return None
 

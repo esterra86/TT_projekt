@@ -38,7 +38,7 @@ def send_ping(dst_ip):
     )
 
     print(f"[ICMP] Wysyłam Echo Request do {dst_ip}")
-    return ip_send(packet, dst_ip)
+    return ip_send(packet, dst_ip, proto="ICMP")
 
 
 def handle_icmp_packet(ip_packet):
@@ -61,7 +61,7 @@ def handle_icmp_packet(ip_packet):
             payload=icmp.payload
         )
 
-        return ip_send(reply, ip_packet.src_ip)
+        return ip_send(reply, ip_packet.src_ip, proto="ICMP")
 
     # jeśli to Echo Reply
     elif icmp.type == ICMP_ECHO_REPLY:

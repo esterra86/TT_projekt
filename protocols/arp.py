@@ -92,3 +92,4 @@ def handle_arp_packet(packet):
 
     return packet
 arp_cache["192.168.0.20"] = "66:55:44:33:22:11"
+arp_cache["192.168.0.10"] = "AA:BB:CC:DD:EE:01"
