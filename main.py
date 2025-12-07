@@ -1,57 +1,27 @@
-# from http.server import HTTPServer, BaseHTTPRequestHandler
-# import time
-
-# HOST = "192.168.1.97" # run ipconfig in cmd and copy IPv4 Address from listed information
-# PORT = 9999
-# class NeuralHTTP(BaseHTTPRequestHandler):
-
-#     #handles how we respond to get requests
-#     def do_GET(self):
-#         self.send_response(200)
-#         #change content type to text-html
-#         self.send_header("Content-type", "text/html")
-#         self.end_headers()
-#         self.wfile.write(bytes("<html><body><h1>Hello World</h1></body></html>", "utf-8"))
-
-#     def do_POST(self):
-#         self.send_response(200)
-#         #we're gonna send json type of object
-#         self.send_header("Content-type", "application/json")
-#         self.end_headers()
-
-#         date = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))
-#         #time.time() - returns currnet time
-#         self.wfile.write(bytes('{"time":"' +date + '" }', "utf-8"))
-
-
-
-
-# server = HTTPServer((HOST,PORT), NeuralHTTP)
-# print("server now running...")
-#server.serve_forever()
-#server.server_close()
-#print("server stopped")
-
-
-#in webbrowser paste 192.168.1.97:9999
-#or in cmd curl 192.168.1.97:9999 (this will show you code in html)
-
 from protocols.arp import resolve
 from protocols.icmp import send_ping
 from layers.ethernet_layer import receive as eth_receive
 from layers.transport_layer import send_udp_datagram
 from protocols.tcp_sim import client_start_handshake
 
+# funkcje warstwy aplikacyjnej – import dopiero tutaj, po innych warstwach
+from layers.application_layer import (
+    send_http_get,
+    send_https_get,
+    send_smtp_mail,
+    send_ntp_query,
+)
 
-if __name__ == "__main__":
-    # === TEST ARP ===
-    print("=== TEST ARP ===")
+
+def test_arp():
+    print("=== TEST 1: ARP (IP -> MAC) ===")
     mac = resolve("192.168.0.20")
     print("Otrzymany MAC:", mac)
     print()
 
-    # === TEST ICMP PING (full round trip) ===
-    print("=== TEST ICMP PING (full round trip) ===")
+
+def test_icmp_ping():
+    print("=== TEST 2: ICMP PING (full round trip) ===")
     # 1. Klient wysyła Echo Request (ICMP → IP → Ethernet)
     req_frame = send_ping("192.168.0.20")
 
@@ -67,73 +37,148 @@ if __name__ == "__main__":
         print("[MAIN] Nie otrzymano ramki z Echo Reply")
     print()
 
-    # === TEST UDP (symulowany) ===
-    print("=== TEST UDP (symulowany) ===")
+
+def test_udp():
+    print("=== TEST 3: UDP (symulowany) ===")
     # 1. Klient wysyła datagram UDP (UDP → IP → Ethernet)
     udp_frame = send_udp_datagram(
         dst_ip="192.168.0.20",
         src_port=5000,
         dst_port=6000,
-        payload="Hello from UDP layer!"
+        payload="Hello from UDP layer!",
     )
 
     print("\n--- Drugi host ODBIERA datagram UDP ---")
-    # 2. „Drugi host” odbiera ramkę → Ethernet → IP → Transport (UDP)
+    # 2. „Drugi host” odbiera ramkę → Ethernet → IP → UDP
     if udp_frame is not None:
         eth_receive(udp_frame)
     else:
         print("[MAIN] Nie otrzymano ramki UDP (udp_frame is None)")
     print()
 
-    # === TEST TCP HANDSHAKE (symulowany) ===
-    print("=== TEST TCP HANDSHAKE (symulowany) ===")
+
+def test_tcp_handshake():
+    print("=== TEST 4: TCP HANDSHAKE (symulowany) ===")
     client_ip = "192.168.0.10"
     server_ip = "192.168.0.20"
     client_port = 4000
     server_port = 80
+
+    from protocols.tcp_sim import (
+        client_start_handshake,
+        server_handle_segment,
+        client_handle_segment,
+    )
 
     # 1. Klient inicjuje handshake: wysyła SYN (TCP → IP → Ethernet)
     tcp_client_state, syn_frame = client_start_handshake(
         dst_ip=server_ip,
         src_ip=client_ip,
         src_port=client_port,
-        dst_port=server_port
+        dst_port=server_port,
     )
 
-    # Na potrzeby testu nie przepuszczamy SYN przez ip_layer.receive,
-    # tylko bierzemy IPPacket bezpośrednio z payloadu ramki.
-    print("\n--- Serwer ODBIERA SYN (bezpośrednio IP z ramki) ---")
+    # SYN przeszedł przez IP i Ethernet – w ramce payloadem jest IPPacket
+    print("\n--- Serwer ODBIERA SYN (IP z ramki) ---")
     syn_ip_packet = syn_frame.payload
 
-    from layers.transport_layer import receive as transport_receive
-
-    # 2. Serwer przetwarza SYN w warstwie transportowej → SYN-ACK
-    tcp_server_state, syn_ack_frame = transport_receive(
+    # 2. Serwer przetwarza SYN w tcp_sim.server_handle_segment → SYN-ACK
+    tcp_server_state, syn_ack_frame = server_handle_segment(
         syn_ip_packet,
-        tcp_role="server",
-        tcp_conn_state=None
+        conn_state=None,
     )
 
-    # 3. Klient odbiera SYN-ACK (ponownie, bierzemy IPPacket z ramki)
+    # 3. Klient odbiera SYN-ACK (ramka z powrotem z IP/Ethernet)
     print("\n--- Klient ODBIERA SYN-ACK ---")
+    if syn_ack_frame is None:
+        print("[MAIN] Serwer nie wygenerował SYN-ACK – handshake przerwany")
+        return
+
     syn_ack_ip_packet = syn_ack_frame.payload
 
-    tcp_client_state, ack_frame = transport_receive(
+    tcp_client_state, ack_frame = client_handle_segment(
         syn_ack_ip_packet,
-        tcp_role="client",
-        tcp_conn_state=tcp_client_state
+        conn_state=tcp_client_state,
     )
 
     # 4. Serwer odbiera ACK i przechodzi do ESTABLISHED
     print("\n--- Serwer ODBIERA ACK ---")
+    if ack_frame is None:
+        print("[MAIN] Klient nie wygenerował ACK – handshake przerwany")
+        return
+
     ack_ip_packet = ack_frame.payload
 
-    tcp_server_state, _ = transport_receive(
+    tcp_server_state, _ = server_handle_segment(
         ack_ip_packet,
-        tcp_role="server",
-        tcp_conn_state=tcp_server_state
+        conn_state=tcp_server_state,
     )
 
     print("\n[TCP_SIM] HANDSHAKE ZAKOŃCZONY")
     print("[TCP_SIM] Stan klienta:", tcp_client_state)
     print("[TCP_SIM] Stan serwera:", tcp_server_state)
+    print()
+
+def test_http():
+    print("=== TEST 5: HTTP (symulowany, GET) ===")
+    # HTTP bez TLS (HTTP → TCP → IP → Ethernet)
+    http_frame = send_http_get("192.168.0.20", "/")
+    print("\n--- Drugi host ODBIERA HTTP ---")
+    eth_receive(http_frame)
+    print()
+
+
+def test_https():
+    print("=== TEST 6: HTTPS (HTTP over TLS, symulowany) ===")
+    https_frame = send_https_get("192.168.0.20", "/secure")
+    print("\n--- Drugi host ODBIERA HTTPS ---")
+    eth_receive(https_frame)
+    print()
+
+
+def test_smtp():
+    print("=== TEST 7: SMTP (symulowany) ===")
+    smtp_frame = send_smtp_mail(
+        dst_ip="192.168.0.20",
+        sender="emilia.jerdanek@gmail.com",
+        recipient="marta.zelasko@gmail.com",
+        body="Hello world!",
+        use_tls=False,
+    )
+    print("\n--- Drugi host ODBIERA SMTP ---")
+    eth_receive(smtp_frame)
+    print()
+
+
+def test_smtps():
+    print("=== TEST 8: SMTPS (SMTP over TLS, symulowany) ===")
+    smtps_frame = send_smtp_mail(
+        dst_ip="192.168.0.20",
+        sender="emilia.jerdanek@gmail.com",
+        recipient="marta.zelasko@gmail.com",
+        body="Hello!",
+        use_tls=True,
+    )
+    print("\n--- Drugi host ODBIERA SMTPS ---")
+    eth_receive(smtps_frame)
+    print()
+
+
+def test_ntp():
+    print("=== TEST 9: NTP (symulowany) ===")
+    ntp_frame = send_ntp_query("192.168.0.20")
+    print("\n--- Drugi host ODBIERA NTP ---")
+    eth_receive(ntp_frame)
+    print()
+
+
+if __name__ == "__main__":
+    test_arp()
+    test_icmp_ping()
+    test_udp()
+    test_tcp_handshake()
+    test_http()
+    test_https()
+    test_smtp()
+    test_smtps()
+    test_ntp()
